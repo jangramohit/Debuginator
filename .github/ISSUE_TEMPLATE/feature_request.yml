@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Ideas are welcome! Before proposing a change to the core pipeline, it's worth skimming
-        [ingest-pipeline.md §10](https://github.com/kunal-arora-1411/BugBuster/blob/main/docs/architecture/ingest-pipeline.md),
+        [ingest-pipeline.md §10](https://github.com/kunal-arora-1411/Debuginator/blob/main/docs/architecture/ingest-pipeline.md),
         which lists what is deliberately not built yet and why.
   - type: dropdown
     id: package

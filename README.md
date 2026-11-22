@@ -502,7 +502,7 @@ Prerequisites on the host: **Node.js ≥ 22.15**, `git`, and `sudo`. pnpm is ins
 corepack if missing.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kunal-arora-1411/BugBuster/main/packages/agent/scripts/install.sh \
+curl -fsSL https://raw.githubusercontent.com/kunal-arora-1411/Debuginator/main/packages/agent/scripts/install.sh \
   | sudo bash -s -- \
     --api-key "$BUGBUSTER_API_KEY" \
     --backend-url https://bugbuster.example.com/ingest
@@ -731,7 +731,7 @@ Why it's built this way — read before changing the core:
 
 BugBuster is open source and there's plenty to build — from small fixes to the roadmap pieces
 drawn dashed in the diagram above. Start with
-[`good first issue`](https://github.com/kunal-arora-1411/BugBuster/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+[`good first issue`](https://github.com/kunal-arora-1411/Debuginator/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 and read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the PR process. Please follow the
 [Code of Conduct](CODE_OF_CONDUCT.md), and report security issues privately as described in
 [SECURITY.md](SECURITY.md).

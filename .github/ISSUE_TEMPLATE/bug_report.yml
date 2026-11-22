@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report this! Please search
-        [existing issues](https://github.com/kunal-arora-1411/BugBuster/issues) first.
-        **Security vulnerabilities:** don't file them here — see [SECURITY.md](https://github.com/kunal-arora-1411/BugBuster/blob/main/SECURITY.md).
+        [existing issues](https://github.com/kunal-arora-1411/Debuginator/issues) first.
+        **Security vulnerabilities:** don't file them here — see [SECURITY.md](https://github.com/kunal-arora-1411/Debuginator/blob/main/SECURITY.md).
   - type: dropdown
     id: package
     attributes:

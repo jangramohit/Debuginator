@@ -9,7 +9,7 @@ reports seriously.
 requests.**
 
 Instead, report it privately through GitHub:
-**[Security → Report a vulnerability](https://github.com/kunal-arora-1411/BugBuster/security/advisories/new)**.
+**[Security → Report a vulnerability](https://github.com/kunal-arora-1411/Debuginator/security/advisories/new)**.
 
 Please include as much of the following as you can:
 

@@ -8,11 +8,11 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Finding something to work on
 
-- **[`good first issue`](https://github.com/kunal-arora-1411/BugBuster/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** —
+- **[`good first issue`](https://github.com/kunal-arora-1411/Debuginator/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** —
   small, self-contained tasks with a clear "done when". The best place to start.
-- **[`help wanted`](https://github.com/kunal-arora-1411/BugBuster/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)** — larger
+- **[`help wanted`](https://github.com/kunal-arora-1411/Debuginator/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)** — larger
   pieces, often from the roadmap (the dashed boxes in the README's architecture diagram).
-- Found a bug or have an idea that isn't filed yet? [Open an issue](https://github.com/kunal-arora-1411/BugBuster/issues/new/choose) first.
+- Found a bug or have an idea that isn't filed yet? [Open an issue](https://github.com/kunal-arora-1411/Debuginator/issues/new/choose) first.
 
 **Before you start coding, comment on the issue** to say you're taking it, so two people don't
 build the same thing. For anything bigger than a bug fix, describe your approach in the issue and
@@ -85,7 +85,7 @@ would justify building it.
 
 ## Reporting bugs and requesting features
 
-Use the [issue templates](https://github.com/kunal-arora-1411/BugBuster/issues/new/choose). For bugs, the most useful things to include
+Use the [issue templates](https://github.com/kunal-arora-1411/Debuginator/issues/new/choose). For bugs, the most useful things to include
 are: what you ran, what you expected, what happened instead, and your Node/OS/package versions.
 
 **Security vulnerabilities are different** — please don't open a public issue. See
