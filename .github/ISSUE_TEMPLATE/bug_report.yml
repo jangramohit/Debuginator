@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in BugBuster doesn't work the way it should
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this! Please search
+        [existing issues](https://github.com/kunal-arora-1411/Debuginator/issues) first.
+        **Security vulnerabilities:** don't file them here — see [SECURITY.md](https://github.com/kunal-arora-1411/Debuginator/blob/main/SECURITY.md).
+  - type: dropdown
+    id: package
+    attributes:
+      label: Which part of BugBuster?
+      multiple: true
+      options:
+        - SDK (@bugbusterhq/sdk-node)
+        - Agent (@bugbusterhq/agent)
+        - Backend (@bugbusterhq/backend)
+        - Dashboard
+        - Types
+        - Docs
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps or code that shows the problem.
+      placeholder: |
+        1. Start the backend with ...
+        2. Call `captureException(...)` with ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Paste any relevant output. Remove API keys, tokens and personal data first.
+      render: shell
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: BugBuster package versions (or commit), Node.js version, OS.
+      placeholder: "sdk-node 0.3.1, Node 22.15, Ubuntu 24.04"
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on a fix for this.
