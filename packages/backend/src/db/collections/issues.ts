@@ -323,13 +323,15 @@ export async function upsertFoldDelta(
   // marks it. Best-effort, like everything after the fold itself: the fold has been counted, and
   // failing the request now would have the sender retry it and count it twice.
   const spikeOf = async (before: SpikeCheckFields): Promise<boolean> => {
+    // `$eq`: the fingerprint comes from the client's envelope, which is parsed but not validated,
+    // so it is matched literally and can never act as a query operator.
+    const thisIssue = { fingerprint: { $eq: delta.fingerprint } };
     try {
       const stale = staleHours(before.hourly, nowDate);
       if (stale.length > 0) {
-        await issuesCollection(db).updateOne(
-          { fingerprint: delta.fingerprint },
-          { $unset: Object.fromEntries(stale.map((h) => [`hourly.${h}`, ""])) },
-        );
+        await issuesCollection(db).updateOne(thisIssue, {
+          $unset: Object.fromEntries(stale.map((h) => [`hourly.${h}`, ""])),
+        });
       }
       if (before.alertPendingAt !== undefined) return false;
       const facts = detectSpike({
@@ -343,7 +345,7 @@ export async function upsertFoldDelta(
       const cooledDown = new Date(nowDate.getTime() - SPIKE_COOLDOWN_MS).toISOString();
       const marked = await issuesCollection(db).updateOne(
         {
-          fingerprint: delta.fingerprint,
+          ...thisIssue,
           alertPendingAt: { $exists: false },
           $or: [{ lastSpikeAt: { $exists: false } }, { lastSpikeAt: { $lt: cooledDown } }],
         },
