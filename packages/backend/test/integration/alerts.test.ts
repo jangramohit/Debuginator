@@ -112,6 +112,8 @@ type ErrorSpec = {
   message?: string;
   /** The function the error was thrown in; with the message, what makes two errors the same. */
   fn?: string;
+  /** How many times the fold says it happened (default 3). */
+  count?: number;
 };
 
 function items(e: ErrorSpec): Envelope["items"] {
@@ -124,9 +126,9 @@ function items(e: ErrorSpec): Envelope["items"] {
         fingerprint: e.fp,
         windowStart: new Date(0).toISOString(),
         windowEnd: new Date().toISOString(),
-        count: 3,
+        count: e.count ?? 3,
         userIds: [],
-        endpointCounts: { "POST /api/checkout": 3 },
+        endpointCounts: { "POST /api/checkout": e.count ?? 3 },
         durationSamplesMs: [],
         service: e.service ?? "orders-api",
         exemplars: [eventId],
@@ -686,5 +688,114 @@ describe("a backend without email set up", () => {
     expect((await plain.inject({ method: "GET", url: "/internal/alerts/run" })).statusCode).toBe(
       404,
     );
+  });
+});
+
+describe("spike alerts", () => {
+  const HOUR = 60 * 60 * 1000;
+  const thisHour = () => Math.floor(Date.now() / HOUR);
+
+  /**
+   * Makes an issue look as if it had been counted for two days at `perHour` events an hour (plus
+   * one hour too old to matter), and clears its new-issue alert, so the next fold is judged
+   * against that history.
+   */
+  async function giveHistory(db: () => Db, fingerprint: string, perHour: number) {
+    const h = thisHour();
+    const hourly: Record<string, number> = { [String(h - 30)]: 999 };
+    for (let i = 1; i <= 24; i++) hourly[String(h - i)] = perHour;
+    await db()
+      .collection("issues")
+      .updateOne(
+        { fingerprint },
+        {
+          $set: { hourly, rateTrackedSince: new Date(Date.now() - 2 * 24 * HOUR).toISOString() },
+          $unset: { alertPendingAt: "", alertServices: "", alertEnvironments: "" },
+        },
+      );
+  }
+
+  it("a known error happening far more often than usual emails once, as a spike", async () => {
+    const { orgId, apiKey, db } = await newOrg();
+    await setAlerts(orgId, { enabled: true, recipients: ["dev@example.com"] });
+    await ingest(apiKey, { fp: "fp-spiky" });
+    await waitForEmails(1);
+    expect(mailer.sent).toHaveLength(1);
+    await giveHistory(db, "fp-spiky", 1);
+
+    await ingest(apiKey, { fp: "fp-spiky", count: 30 });
+    await waitForEmails(2);
+    expect(mailer.sent).toHaveLength(2);
+    const { email } = mailer.sent[1]!;
+    expect(email.subject).toMatch(/^Spike in orders-api · production: TypeError: /);
+    expect(email.text).toMatch(/Spiking: \d+ events this hour, usually about 1 an hour/);
+    expect(email.text).toContain("A known error is spiking");
+    expect(await pending(db)).toEqual([]);
+
+    const doc = await db().collection("issues").findOne({ fingerprint: "fp-spiky" });
+    expect(doc!.lastSpikeAt).toBeDefined();
+    expect(doc!.spike).toBeUndefined();
+    // The hour too old to matter was removed as the fold landed.
+    expect(Object.keys(doc!.hourly)).not.toContain(String(thisHour() - 30));
+
+    // Still spiking, but it was just flagged: no second email for the same burst.
+    await ingest(apiKey, { fp: "fp-spiky", count: 30 });
+    await waitForEmails(3, 300);
+    expect(mailer.sent).toHaveLength(2);
+  });
+
+  it("a busy error at its usual rate does not spike", async () => {
+    const { orgId, apiKey, db } = await newOrg();
+    await setAlerts(orgId, { enabled: true, recipients: ["dev@example.com"] });
+    await ingest(apiKey, { fp: "fp-busy" });
+    await waitForEmails(1);
+    await giveHistory(db, "fp-busy", 10);
+
+    // Around 33 this hour against a usual 10: busy, but not 5 times the usual.
+    await ingest(apiKey, { fp: "fp-busy", count: 30 });
+    await waitForEmails(2, 300);
+    expect(mailer.sent).toHaveLength(1);
+    expect(await pending(db)).toEqual([]);
+  });
+
+  it("needs a day of counts first, so a just-created error never spikes", async () => {
+    const { orgId, apiKey } = await newOrg();
+    await setAlerts(orgId, { enabled: true, recipients: ["dev@example.com"] });
+    await ingest(apiKey, { fp: "fp-young" });
+    await waitForEmails(1);
+    await ingest(apiKey, { fp: "fp-young", count: 100 });
+    await waitForEmails(2, 300);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  it("an org with spike alerts off gets no email, and the spike is not kept", async () => {
+    const { orgId, apiKey, db } = await newOrg();
+    const org = await setAlerts(orgId, {
+      enabled: true,
+      recipients: ["dev@example.com"],
+      spikes: false,
+    });
+    expect(org.alerts.spikes).toBe(false);
+    await ingest(apiKey, { fp: "fp-quiet" });
+    await waitForEmails(1);
+    await giveHistory(db, "fp-quiet", 1);
+
+    await ingest(apiKey, { fp: "fp-quiet", count: 30 });
+    await waitForEmails(2, 300);
+    expect(mailer.sent).toHaveLength(1);
+    expect(await pending(db)).toEqual([]);
+  });
+
+  it("spike alerts are on unless switched off, and must be true or false", async () => {
+    const { orgId } = await newOrg();
+    expect((await setAlerts(orgId, { enabled: true, recipients: ["a@x.io"] })).alerts.spikes).toBe(
+      true,
+    );
+    const bad = await admin("PUT", `/admin/orgs/${orgId}/alerts`, {
+      enabled: true,
+      recipients: ["a@x.io"],
+      spikes: "yes",
+    });
+    expect(bad.json().error).toBe("spikes must be true or false");
   });
 });

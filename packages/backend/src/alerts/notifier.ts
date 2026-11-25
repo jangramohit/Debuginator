@@ -14,8 +14,8 @@ import { renderAlertEmail, renderTestEmail, type AlertIssue } from "./email.js";
 
 /**
  * Email alerts for new issues. Ingest marks every issue it creates as alert-pending (in the same
- * write that creates it), and marks an existing one again when it first appears in another
- * environment or service; this turns the pending issues of one org into at most one email per
+ * write that creates it), marks an existing one again when it first appears in another
+ * environment or service, and marks a known one that spikes (alerts/spike.ts); this turns the pending issues of one org into at most one email per
  * run, then clears them. It runs right after an ingest that created an issue, from a scheduler
  * calling /internal/alerts/run, and on a timer in a long-running backend: any of them is enough,
  * and running twice at once is safe (see the lease).
@@ -42,7 +42,10 @@ export interface AlertRunResult {
   emails: number;
   /** Issues those emails covered. */
   alerted: number;
-  /** Pending issues dropped without an email: from before alerts were on, or filtered out. */
+  /**
+   * Pending issues dropped without an email: from before alerts were on, filtered out, or spikes
+   * for an org that has spike alerts off.
+   */
   skipped: number;
   /** True when issues are waiting: the hourly cap was reached, or another process is sending. */
   held: boolean;
@@ -179,10 +182,15 @@ export class AlertNotifier {
       const wanted = pending.filter(
         (issue) =>
           (issue.alertPendingAt ?? issue.firstSeen) >= alerts.since &&
+          (!issue.spike || alerts.spikes !== false) &&
           matchesAny(placesOf(issue.alertServices, issue.services), alerts.services) &&
           matchesAny(placesOf(issue.alertEnvironments, issue.environments), alerts.environments),
       );
-      const twins = await findEarlierTwins(db, wanted);
+      // Only new errors can be an old error under a new fingerprint; a spike is a known issue.
+      const twins = await findEarlierTwins(
+        db,
+        wanted.filter((i) => !i.spike),
+      );
       const send: IssueDocument[] = wanted.filter((i) => !twins.has(i.fingerprint));
       const sending = new Set(send.map((i) => i.fingerprint));
       const skip = pending.filter((i) => !sending.has(i.fingerprint));
@@ -214,6 +222,7 @@ export class AlertNotifier {
         count: i.count,
         firstSeen: i.firstSeen,
         ...(topEndpoint(i) ? { topEndpoint: topEndpoint(i) } : {}),
+        ...(i.spike ? { spike: i.spike } : {}),
         stack: stackTop(i.exemplarRefs[0] ? stackById.get(i.exemplarRefs[0].eventId) : undefined),
       }));
 
@@ -223,6 +232,7 @@ export class AlertNotifier {
           orgName: org.name,
           issues,
           more: send.length - listed.length,
+          spikes: send.filter((i) => i.spike).length,
           dashboardUrl: this.options.dashboardUrl,
         }),
       );
@@ -252,6 +262,7 @@ export class AlertNotifier {
       renderTestEmail({
         orgName: org.name,
         scope: alertScope(alerts),
+        spikes: alerts.spikes !== false,
         dashboardUrl: this.options.dashboardUrl,
       }),
     );

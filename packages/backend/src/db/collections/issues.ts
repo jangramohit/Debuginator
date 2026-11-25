@@ -7,6 +7,14 @@ import {
   type Issue,
 } from "@bugbusterhq/types";
 import { strongestCauses } from "./issue-links.js";
+import {
+  detectSpike,
+  hourOf,
+  SPIKE_COOLDOWN_MS,
+  staleHours,
+  type HourlyCounts,
+  type SpikeFacts,
+} from "../../alerts/spike.js";
 
 const DUPLICATE_KEY_ERROR_CODE = 11000;
 
@@ -61,6 +69,21 @@ export interface IssueDocument {
    * lists (or none), so "not in the list" would not mean "never seen there".
    */
   placesTracked?: boolean;
+  /**
+   * Events per clock hour (key: hours since the epoch, see alerts/spike.ts), for spike alerts.
+   * Only the last day or so is kept; older hours are removed as new folds land.
+   */
+  hourly?: HourlyCounts;
+  /** When `hourly` began for this issue: a spike needs a full day of counts behind it. */
+  rateTrackedSince?: string;
+  /** When the issue last spiked, so one burst flags it once, not on every fold (the cooldown). */
+  lastSpikeAt?: string;
+  /**
+   * Set when the pending alert is a spike of a known error, not a new error or a new place: how
+   * many events this hour and how many usually. Removed together with `alertPendingAt`, and
+   * removed if the issue meanwhile reaches a new place (that alert says more).
+   */
+  spike?: SpikeFacts;
 }
 
 export interface IssueTitle {
@@ -188,22 +211,40 @@ function sanitizeEndpointKey(endpoint: string): string {
  */
 /**
  * What a fold did to its issue, for email alerts: `created` when the error is new, `newPlace` when
- * an existing issue appeared in an environment or service it had not been seen in before.
+ * an existing issue appeared in an environment or service it had not been seen in before, `spike`
+ * when a known issue was just flagged as happening far more often than usual (alerts/spike.ts).
  */
 export interface FoldOutcome {
   created: boolean;
   newPlace: boolean;
+  spike: boolean;
 }
+
+/** What upsertFoldDelta reads back from the issue as it was before the fold. */
+type SpikeCheckFields = Pick<
+  IssueDocument,
+  | "services"
+  | "environments"
+  | "placesTracked"
+  | "alertPendingAt"
+  | "hourly"
+  | "rateTrackedSince"
+  | "lastSpikeAt"
+>;
 
 export async function upsertFoldDelta(
   db: Db,
   delta: FoldDelta,
-  context: { environments?: readonly string[] } = {},
+  context: { environments?: readonly string[]; now?: Date } = {},
 ): Promise<FoldOutcome> {
-  const now = new Date().toISOString();
+  const nowDate = context.now ?? new Date();
+  const now = nowDate.toISOString();
   const endpointEntries = Object.entries(delta.endpointCounts);
 
-  const inc: Record<string, number> = { count: delta.count };
+  const inc: Record<string, number> = {
+    count: delta.count,
+    [`hourly.${hourOf(nowDate)}`]: delta.count,
+  };
   for (const [endpoint, count] of endpointEntries) {
     inc[`endpointCounts.${sanitizeEndpointKey(endpoint)}`] = count;
   }
@@ -240,6 +281,8 @@ export async function upsertFoldDelta(
       durationSamplesMs: { $each: delta.durationSamplesMs, $slice: -MAX_DURATION_SAMPLES },
     },
     $set: { lastSeen: now },
+    // Sets it when absent (a new issue, or one stored before hourly counts were kept), else keeps it.
+    $min: { rateTrackedSince: now },
     $setOnInsert: setOnInsert,
   };
 
@@ -247,35 +290,97 @@ export async function upsertFoldDelta(
   // fold brought the issue somewhere new. Only issues created with place tracking count (see
   // `placesTracked`), and an empty list is not news either: an issue created by a fold that carried
   // no example events has no environment yet, and its first one is where it was created.
-  const outcome = async (
-    before: Pick<IssueDocument, "services" | "environments" | "placesTracked"> | null,
-  ): Promise<FoldOutcome> => {
-    if (before === null) return { created: true, newPlace: false };
-    if (before.placesTracked !== true) return { created: false, newPlace: false };
+  const newPlaceOf = async (
+    before: Pick<IssueDocument, "services" | "environments" | "placesTracked">,
+  ): Promise<boolean> => {
+    if (before.placesTracked !== true) return false;
     const seen = (list: string[] | undefined, value: string) =>
       !Array.isArray(list) || list.length === 0 || list.includes(value);
     const envs = context.environments ?? [];
     const newService = delta.service !== undefined && !seen(before.services, delta.service);
     const newEnvs = envs.filter((env) => !seen(before.environments, env));
-    if (!newService && newEnvs.length === 0) return { created: false, newPlace: false };
+    if (!newService && newEnvs.length === 0) return false;
     // Where the alert is about: a new service, in every environment this fold came from; or this
-    // fold's service, in the environments that are new.
+    // fold's service, in the environments that are new. A spike waiting to be sent becomes this
+    // alert instead: the issue reaching somewhere new is the bigger news.
     await issuesCollection(db).updateOne(
       { fingerprint: delta.fingerprint },
       {
         $set: { alertPendingAt: now },
+        $unset: { spike: "" },
         $addToSet: {
           alertServices: { $each: delta.service ? [delta.service] : [] },
           alertEnvironments: { $each: newService ? [...envs] : newEnvs },
         },
       },
     );
-    return { created: false, newPlace: true };
+    return true;
+  };
+
+  // Whether this fold made a known issue spike (alerts/spike.ts), and if so marks it for an alert.
+  // Only when no other alert is waiting for the issue, so a pending `spike` always means the alert
+  // is about the spike alone. One conditional update: of two folds that both see the spike, one
+  // marks it. Best-effort, like everything after the fold itself: the fold has been counted, and
+  // failing the request now would have the sender retry it and count it twice.
+  const spikeOf = async (before: SpikeCheckFields): Promise<boolean> => {
+    // `$eq`: the fingerprint comes from the client's envelope, which is parsed but not validated,
+    // so it is matched literally and can never act as a query operator.
+    const thisIssue = { fingerprint: { $eq: delta.fingerprint } };
+    try {
+      const stale = staleHours(before.hourly, nowDate);
+      if (stale.length > 0) {
+        await issuesCollection(db).updateOne(thisIssue, {
+          $unset: Object.fromEntries(stale.map((h) => [`hourly.${h}`, ""])),
+        });
+      }
+      if (before.alertPendingAt !== undefined) return false;
+      const facts = detectSpike({
+        before: before.hourly,
+        added: delta.count,
+        now: nowDate,
+        trackedSince: before.rateTrackedSince,
+        lastSpikeAt: before.lastSpikeAt,
+      });
+      if (!facts) return false;
+      const cooledDown = new Date(nowDate.getTime() - SPIKE_COOLDOWN_MS).toISOString();
+      const marked = await issuesCollection(db).updateOne(
+        {
+          ...thisIssue,
+          alertPendingAt: { $exists: false },
+          $or: [{ lastSpikeAt: { $exists: false } }, { lastSpikeAt: { $lt: cooledDown } }],
+        },
+        {
+          $set: { alertPendingAt: now, lastSpikeAt: now, spike: facts },
+          $addToSet: {
+            alertServices: { $each: delta.service ? [delta.service] : [] },
+            alertEnvironments: { $each: [...(context.environments ?? [])] },
+          },
+        },
+      );
+      return marked.modifiedCount === 1;
+    } catch {
+      return false;
+    }
+  };
+
+  const outcome = async (before: SpikeCheckFields | null): Promise<FoldOutcome> => {
+    if (before === null) return { created: true, newPlace: false, spike: false };
+    if (await newPlaceOf(before)) return { created: false, newPlace: true, spike: false };
+    return { created: false, newPlace: false, spike: await spikeOf(before) };
   };
   const options = {
     upsert: true,
     returnDocument: "before" as const,
-    projection: { _id: 0, services: 1, environments: 1, placesTracked: 1 },
+    projection: {
+      _id: 0,
+      services: 1,
+      environments: 1,
+      placesTracked: 1,
+      alertPendingAt: 1,
+      hourly: 1,
+      rateTrackedSince: 1,
+      lastSpikeAt: 1,
+    },
   };
 
   try {
@@ -491,7 +596,12 @@ export async function listAlertPending(db: Db, limit: number): Promise<IssueDocu
     .toArray();
 }
 
-const ALERT_FIELDS = { alertPendingAt: "", alertServices: "", alertEnvironments: "" } as const;
+const ALERT_FIELDS = {
+  alertPendingAt: "",
+  alertServices: "",
+  alertEnvironments: "",
+  spike: "",
+} as const;
 
 /**
  * Marks these issues' alerts as dealt with: only where the mark is still the one that was read. A

@@ -773,11 +773,11 @@ export const ADMIN_PAGE_HTML = String.raw`<!doctype html>
     return { label: l, input: c };
   }
   function alertsBlock(o) {
-    var a = o.alerts || { enabled: false, recipients: [], services: [], environments: [], includeStack: true, sentLastHour: 0 };
+    var a = o.alerts || { enabled: false, recipients: [], services: [], environments: [], includeStack: true, spikes: true, sentLastHour: 0 };
     var b = el("section", "block");
     b.appendChild(el("h3", null, "Email alerts"));
     b.appendChild(el("p", "help", emailAlerts.configured
-      ? "An email from " + emailAlerts.from + " each time this organization’s services report an error BugBuster hasn’t seen before. New errors that arrive together share one email."
+      ? "An email from " + emailAlerts.from + " each time this organization’s services report an error BugBuster hasn’t seen before, or a known error suddenly happens far more often than usual. Alerts that arrive together share one email."
       : "Email alerts aren’t set up on this backend yet: set BUGBUSTER_BREVO_API_KEY and BUGBUSTER_ALERTS_FROM, then restart or redeploy it. You can save these settings now; they apply once it is."));
 
     var f = el("form"); f.noValidate = true; f.style.display = "grid"; f.style.gap = "12px";
@@ -790,6 +790,7 @@ export const ADMIN_PAGE_HTML = String.raw`<!doctype html>
     var env = el("input"); env.id = "alertsEnvironments"; env.autocomplete = "off"; env.spellcheck = false; env.placeholder = "production…";
     env.value = a.environments.join(", ");
     var stack = checkbox("alertsStack", "Include the top of the stack trace", a.includeStack !== false);
+    var spikes = checkbox("alertsSpikes", "Also alert when a known error spikes (far more often than usual)", a.spikes !== false);
 
     var actions = el("div", "inline");
     var save = el("button", null, "Save alerts"); save.type = "submit";
@@ -805,6 +806,7 @@ export const ADMIN_PAGE_HTML = String.raw`<!doctype html>
       field("Only these services", svc, "Comma-separated. Leave empty for every service."),
       field("Only these environments", env, "Comma-separated. Leave empty for every environment; most teams use production."),
       stack.label,
+      spikes.label,
       actions
     );
     b.appendChild(f);
@@ -830,7 +832,8 @@ export const ADMIN_PAGE_HTML = String.raw`<!doctype html>
         recipients: splitList(rec.value, /[\s,;]+/),
         services: splitList(svc.value, /,/),
         environments: splitList(env.value, /,/),
-        includeStack: stack.input.checked
+        includeStack: stack.input.checked,
+        spikes: spikes.input.checked
       }).then(function () { return done("Saved."); })
         .catch(function (x) { msg.textContent = x.message; }).finally(function () { save.disabled = false; });
     });
