@@ -661,6 +661,18 @@ cd packages/backend
 BUGBUSTER_CONTROL_DB_URI=mongodb://localhost:27017 PORT=8080 pnpm start
 ```
 
+<details>
+<summary>Terminal A — backend (Windows PowerShell)</summary>
+
+```powershell
+cd packages/backend
+$env:BUGBUSTER_CONTROL_DB_URI = 'mongodb://localhost:27017'
+$env:PORT = '8080'
+pnpm start
+```
+
+</details>
+
 ```bash
 # B — Agent  (Windows: BUGBUSTER_AGENT_SOCKET=\\.\pipe\bugbuster-agent)
 cd packages/agent
@@ -670,11 +682,36 @@ BUGBUSTER_API_KEY=demo-api-key \
 pnpm start
 ```
 
+<details>
+<summary>Terminal B — Agent (Windows PowerShell)</summary>
+
+```powershell
+cd packages/agent
+$env:BUGBUSTER_AGENT_SOCKET = '\\.\pipe\bugbuster-agent'
+$env:BUGBUSTER_BACKEND_URL = 'http://localhost:8080/ingest'
+$env:BUGBUSTER_API_KEY = 'demo-api-key'
+node dist/index.js
+```
+
+</details>
+
 ```bash
 # C — the instrumented demo app
 cd examples/demo-app
 BUGBUSTER_API_KEY=demo-api-key BUGBUSTER_AGENT_SOCKET=/tmp/bugbuster-agent.sock pnpm dev
 ```
+
+<details>
+<summary>Terminal C — demo app (Windows PowerShell)</summary>
+
+```powershell
+cd examples/demo-app
+$env:BUGBUSTER_API_KEY = 'demo-api-key'
+$env:BUGBUSTER_AGENT_SOCKET = '\\.\pipe\bugbuster-agent'
+pnpm dev
+```
+
+</details>
 
 Generate telemetry and look at it:
 
