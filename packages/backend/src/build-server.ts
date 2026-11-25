@@ -317,6 +317,7 @@ export function registerRoutes(
       services: a?.services ?? [],
       environments: a?.environments ?? [],
       includeStack: a?.includeStack ?? true,
+      spikes: a?.spikes !== false,
       ...(a?.since ? { since: a.since } : {}),
       sentLastHour: (state?.sentAt ?? []).filter((t) => new Date(t).getTime() > hourAgo).length,
       ...(state?.lastSentAt ? { lastSentAt: state.lastSentAt } : {}),
@@ -469,7 +470,7 @@ export function registerRoutes(
   );
 
   // An org's email alerts: whether they're on, who gets them, and which issues count (services and
-  // environments; empty = all). Replaces the whole setting. Switching them on starts from now, so
+  // environments; empty = all; and whether known errors that spike count too). Replaces the whole setting. Switching them on starts from now, so
   // issues that appeared while they were off are not all emailed at once.
   app.put<{ Params: { orgId: string }; Body: unknown }>(
     "/admin/orgs/:orgId/alerts",
@@ -517,6 +518,10 @@ export function registerRoutes(
         await reply.code(400).send({ error: "includeStack must be true or false" });
         return;
       }
+      if (body.spikes !== undefined && typeof body.spikes !== "boolean") {
+        await reply.code(400).send({ error: "spikes must be true or false" });
+        return;
+      }
 
       const org = await controlDb.setAlerts(request.params.orgId, {
         enabled: body.enabled,
@@ -524,6 +529,7 @@ export function registerRoutes(
         services,
         environments,
         includeStack: body.includeStack !== false,
+        spikes: body.spikes !== false,
       });
       if (!org) {
         await reply.code(404).send({ error: "no such org" });

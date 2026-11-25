@@ -273,7 +273,7 @@ their dates, never the key or its hash.
   "keys": [{ "keyId": "key_3f9a1c2d4e5b", "orgId": "acme", "name": "checkout-api production",
              "createdAt": "2026-10-01T09:00:00.000Z", "lastUsedAt": "2026-11-03T08:12:00.000Z" }],
   "alerts": { "enabled": true, "recipients": ["dev@acme.com"], "services": [],
-              "environments": ["production"], "includeStack": true,
+              "environments": ["production"], "includeStack": true, "spikes": true,
               "since": "2026-11-05T09:00:00.000Z", "sentLastHour": 1,
               "lastSentAt": "2026-11-05T09:41:12.000Z" }
 }],
@@ -304,12 +304,14 @@ Sets an org's email alerts (replacing the previous setting). Admin token.
 
 ```json
 { "enabled": true, "recipients": ["dev@acme.com", "oncall@acme.com"],
-  "services": [], "environments": ["production"], "includeStack": true }
+  "services": [], "environments": ["production"], "includeStack": true, "spikes": true }
 ```
 
 - `recipients`: up to 20 addresses, at least one when `enabled`. Each gets their own copy.
 - `services` / `environments`: only issues seen in one of these; empty or absent = all.
 - `includeStack` (default `true`): whether emails include the top of the stack trace.
+- `spikes` (default `true`): whether a known error happening far more often than usual also
+  emails (see the README for the rule).
 
 Switching alerts on starts from now: issues that appeared while they were off are not emailed.
 What sends an email is described in the README's [Email alerts](../README.md#email-alerts).
@@ -392,6 +394,6 @@ them.
   changed and when, but not who changed it.
 - Read-only keys. Every org key can both send and read, so a developer with a dashboard key could
   also send data.
-- More alert kinds: a resolved issue coming back, a sudden spike in a known issue, and daily
-  digests. Today an email means a new issue, or one newly seen in an environment or service.
+- More alert kinds: a resolved issue coming back, and daily digests. Today an email means a new
+  issue, one newly seen in an environment or service, or a known one that spikes.
 - Teams managing their own alert recipients. Recipients are set by the operator on `/admin`.

@@ -172,7 +172,8 @@ the old version during a rolling deploy.
 
 ### Email alerts
 
-Each organization can get an email when its services report an error BugBuster hasn't seen before.
+Each organization can get an email when its services report an error BugBuster hasn't seen before,
+or when an error it already knows about suddenly happens far more often than usual.
 Emails go out through **your Brevo account**, from an address you verify there; you choose who gets
 them, per organization, on the admin page.
 
@@ -201,7 +202,12 @@ then **Send test email** to check delivery.
   together share one email, which lists up to ten of them.
 - An existing issue appearing in an environment or service it hadn't been seen in before. So with
   alerts limited to `production`, an error first seen in staging alerts when it reaches production.
-- Not the same error happening again, and not issues from before alerts were switched on.
+- A **spike**: an existing issue with at least 20 events in one clock hour and at least 5 times its
+  average per hour over the 24 hours before (an error that was quiet and comes back counts too).
+  An issue needs a day of counts behind it first, and alerts for a spike at most once every 6
+  hours. On by default; untick *Also alert when a known error spikes* to turn it off.
+- Not the same error happening again at its usual rate, and not issues from before alerts were
+  switched on.
 - Not an error whose fingerprint changed only because a service upgraded its SDK (0.3 added the
   service to fingerprints): an older issue with the same error, service and code location counts as
   the same error.

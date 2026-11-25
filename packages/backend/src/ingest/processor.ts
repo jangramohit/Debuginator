@@ -27,7 +27,7 @@ export interface ProcessResult {
   rejectedLogs: number;
   /**
    * Issues that may need an email alert now: created by this envelope (errors never seen before),
-   * or seen for the first time in another environment or service.
+   * seen for the first time in another environment or service, or known ones that just spiked.
    */
   alertCandidates: number;
   fingerprintsSeen: string[];
@@ -80,12 +80,12 @@ export async function processEnvelope(db: Db, rawBody: Buffer): Promise<ProcessR
         .filter((s) => s !== undefined);
       const service = fold.service ?? seenIn[0]?.name;
       const environments = [...new Set(seenIn.map((s) => s.environment))];
-      const { created, newPlace } = await upsertFoldDelta(
+      const { created, newPlace, spike } = await upsertFoldDelta(
         db,
         service ? { ...fold, service } : fold,
         { environments },
       );
-      if (created || newPlace) alertCandidates++;
+      if (created || newPlace || spike) alertCandidates++;
       // The fold's cause links (root-cause-graph.md §5), right after the fold they belong to.
       processedLinks += await recordCauseLinks(db, fold.fingerprint, fold.causedBy);
       fingerprintsSeen.add(item.payload.fingerprint);

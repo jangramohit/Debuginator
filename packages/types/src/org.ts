@@ -22,6 +22,11 @@ export const OrgAlertsSchema = z.object({
   environments: z.array(z.string().min(1)).optional(),
   /** Whether alert emails include the top of the stack trace. */
   includeStack: z.boolean(),
+  /**
+   * Whether a known error suddenly happening far more often than usual also alerts (a spike).
+   * Absent = on: orgs that set up alerts before spikes existed get them too.
+   */
+  spikes: z.boolean().optional(),
   /** When alerts were last switched on. Issues first seen before this never alert. */
   since: z.string().datetime(),
 });

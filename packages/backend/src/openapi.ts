@@ -622,6 +622,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             "before; new errors that arrive together share one email, and at most " +
             "`BUGBUSTER_ALERTS_MAX_PER_HOUR` emails go out per hour (the rest wait and go together).\n\n" +
             "- `services` / `environments`: only issues seen in one of these. Empty = all.\n" +
+            "- `spikes` (default `true`): also email when a known error spikes: at least 20 events " +
+            "in one clock hour and at least 5 times its average per hour over the 24 hours before. " +
+            "Needs a day of counts for the issue first; an issue alerts for a spike at most once " +
+            "every 6 hours.\n" +
             "- Switching alerts on starts from now: issues that appeared while they were off are " +
             "not emailed.\n\n" +
             "Settings can be saved before the backend is set up to send email " +
@@ -649,6 +653,12 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                       type: "boolean",
                       default: true,
                       description: "Whether emails include the top of the stack trace.",
+                    },
+                    spikes: {
+                      type: "boolean",
+                      default: true,
+                      description:
+                        "Whether a known error happening far more often than usual alerts.",
                     },
                   },
                 },
@@ -1135,6 +1145,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             "services",
             "environments",
             "includeStack",
+            "spikes",
             "sentLastHour",
           ],
           properties: {
@@ -1147,6 +1158,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               description: "Empty = all.",
             },
             includeStack: { type: "boolean" },
+            spikes: { type: "boolean", description: "Whether spikes of known errors alert." },
             since: {
               type: "string",
               format: "date-time",

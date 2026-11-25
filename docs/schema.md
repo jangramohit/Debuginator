@@ -13,7 +13,8 @@ bugbuster_control                  <- one shared database
                   alerts?, alertState?, apiKeyHash? }
                                     <- apiKeyHash: legacy single key, copied into `keys` at startup
                                     <- alerts: { enabled, recipients[], services[], environments[],
-                                                 includeStack, since } (set on the admin page)
+                                                 includeStack, spikes?, since } (set on the admin
+                                                 page; spikes absent = on)
                                     <- alertState: { sentAt[] (last hour), lastSentAt?, lastError?,
                                                      lastErrorAt?, leaseUntil? } (the sender's own)
   keys:         { keyId, orgId, name, keyHash UNIQUE, createdAt, lastUsedAt?, revokedAt? }
@@ -56,6 +57,10 @@ issues:
   alertServices?    string[]                       <- where the pending alert is about; see below
   alertEnvironments? string[]                      <- likewise
   placesTracked?    true                           <- created with complete services/environments
+  hourly?           Record<hour, number>           <- events per clock hour (hours since epoch); last ~day
+  rateTrackedSince? string (ISO datetime)          <- when `hourly` began for the issue
+  lastSpikeAt?      string (ISO datetime)          <- when it last spiked (6-hour cooldown)
+  spike?            { hourCount, usualPerHour }    <- the pending alert is a spike; see below
 ```
 
 Indexes: `fingerprint` (unique), `(lastSeen -1, fingerprint -1)` for the default newest-first
@@ -76,7 +81,19 @@ fields, or removes them without an email when the org's settings exclude the iss
 where `alertPendingAt` is still the value it read, so a mark set during a send is kept for the next
 one. `orgs.alertState.leaseUntil` lets only one backend process send an org's alerts at a time; a
 run that finds it held leaves its issues to the holder, which looks for marks newer than its list
-after releasing the lease and runs again for them. Issues
+after releasing the lease and runs again for them.
+
+**Spike alerts.** Each fold also adds its count to `hourly.<current hour>` in the same upsert, and
+`rateTrackedSince` is set the first time (`$min`). Reading the issue as it was before the fold, ingest
+compares this hour's count with the average of the 24 hours before (`src/alerts/spike.ts`): at least
+20 events and at least 5 times that average, with at least a day since `rateTrackedSince` and 6
+hours since `lastSpikeAt`, marks a spike. The mark is one conditional update that sets
+`alertPendingAt`, `lastSpikeAt` and `spike`, and only applies when no other alert is pending, so a
+pending `spike` always means the alert is about the spike alone; an issue reaching a new place while
+its spike waits becomes that alert instead (`spike` is removed). The sender skips the twin check for
+spikes and drops them for orgs with `alerts.spikes` false. Hours older than the 24 are removed as
+folds land. All of this after the fold itself is best-effort: a failure never fails the request.
+Issues
 stored by an older backend get `title` and `services` from their example events the first time
 they are read, written back once.
 
